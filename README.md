@@ -1,4 +1,4 @@
-###### Karthick Heling centre
+# Karthick Heling centre
 
 This is an android only supported application built in react native.
 It can we used to view status, availability and Location of "Karthick's Clinic".
@@ -8,7 +8,7 @@ The App consists of 3 entities:
 2. Slots -> Its completely hidden in background. It stores the information on which time the clinic is available
 3. Bookings -> Every visitor can book their desired slot in which they can visit the clinic
 
-#### Fire base set up (Backend)
+## Fire base set up (Backend)
 
 1. Create firebase account and add a project
 2. Associate an android app with the project and follow the steps mentioned in firebase website on pasting the google-service.json and linking with gradle files
@@ -26,7 +26,7 @@ The App consists of 3 entities:
 14. Deploy firebase instance by `firebase deploy`
 15. Once deployed, initialize the data by calling initializeDataBase method (url can be found in firebase functions)
 
-##### React native Setup (Front End)
+## React native Setup (Front End)
 
 1. Install React native and its dependencies. [refer here](https://reactnative.dev/docs/environment-setup)
 2. Clone the repository and `cd karthicksHealingCentre`
