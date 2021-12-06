@@ -78,8 +78,8 @@ const App = () => {
           console.log('uidStr:' + uidStr);
           console.log('User signed in anonymously');
           Alert.alert(
-            'You are signed in anonymously',
-            'Your bookings will be lost if you uninstall this app',
+            'Karthik Welcomes You !!!',
+            'You can check my availablity with this application',
             [{text: 'OK', onPress: () => setIsLoading(false)}],
           );
         })

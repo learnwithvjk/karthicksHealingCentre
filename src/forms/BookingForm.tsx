@@ -9,6 +9,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Alert
 } from 'react-native';
 // import PhoneInput from 'react-native-phone-number-input';
 import {globalStyles} from 'src/styles/global';
@@ -77,7 +78,9 @@ export default function BookingForm({navigation, route}: any) {
       },
     };
     const postSubmitAction = async (appointment: any) => {
-      await reDirectToPreviousScreen(appointment);
+      Alert.alert("Bookings confirmed", undefined, [
+        {text: 'OK', onPress: async () => await reDirectToPreviousScreen(appointment)},
+      ]);
     };
     const setLoadingFalse = () => {
       setIsFormLoading(false);

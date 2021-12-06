@@ -9,6 +9,7 @@ import {
   ScrollView,
   TouchableOpacity,
   TouchableWithoutFeedback,
+  Alert
 } from 'react-native';
 // import PhoneInput from 'react-native-phone-number-input';
 import {globalStyles} from 'src/styles/global';
@@ -60,7 +61,9 @@ export default function VisitorForm({route, navigation}: any) {
       },
     };
     const postSubmitAction = async (visitor: any) => {
-      await reDirectToPreviousScreen(visitor);
+      Alert.alert("Visitor added", undefined, [
+        {text: 'OK', onPress: async () => await reDirectToPreviousScreen(visitor)},
+      ]);
     };
     const setLoadingFalse = () => {
       setIsLoading(false);

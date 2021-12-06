@@ -48,7 +48,7 @@ export default function PyramidLoadingSplash({
         </Animated.View>
       </View>
       <View style={styles.titleWrapper}>
-        <Text style={styles.title}> Karthick Accupunture </Text>
+        <Text style={styles.title}> Karthik's Healing Centre </Text>
       </View>
     </View>
   );

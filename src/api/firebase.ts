@@ -3,7 +3,7 @@ import {firebase} from '@react-native-firebase/database'; // import {firebase} f
 const fireBaseInstance = firebase
   .app()
   .database(
-    'https://karthick-acupuncture-default-rtdb.asia-southeast1.firebasedatabase.app',
+    'https://karthik-s-healing-centre-default-rtdb.asia-southeast1.firebasedatabase.app',
   );
 
 export async function getStatus(setValue: Function) {
