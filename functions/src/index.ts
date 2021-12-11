@@ -610,3 +610,30 @@ export const slotUpdatePubSub = functions.pubsub.schedule("59 23 * * *").timeZon
     errLog(error);
   }
 });
+
+export const checkIfUserIsAdmin= functions.https.onRequest(
+    async (request, response) => {
+      try {
+        log("Triggered checkIfUserIsAdmin method with request:",
+            request.query);
+        if (!request.query || !request.query.uid) {
+          throw new Error("required params not sent");
+        }
+        const defaultStaticValuesRef = firestoreInstance.collection("Defaults").doc("staticValues");
+        const defaultStaticValuesSnap = await defaultStaticValuesRef.get();
+        const defaultStaticValuesData = defaultStaticValuesSnap.data();
+        log("defaultStaticValuesData::", defaultStaticValuesData);
+        const admins = defaultStaticValuesData!.admins;
+        if (admins.includes(request.query.uid)) {
+          const responseObj= getResponseObj("given user is an admin", 200);
+          response.send(responseObj);
+          log("response sent successfully", responseObj);
+        } else {
+          throw new Error("you are not an admin");
+        }
+      } catch ( error) {
+        errLog(error);
+        const errorResponseObj =getResponseObj(error.message ? error.message : error.toString(), 500 );
+        response.send(errorResponseObj);
+      }
+    });
