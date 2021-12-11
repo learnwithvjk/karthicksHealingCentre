@@ -1,4 +1,4 @@
-const baseUrl = 'https://us-central1-karthick-acupuncture.cloudfunctions.net';
+const baseUrl = 'https://us-central1-karthik-s-healing-centre.cloudfunctions.net';
 import {commonErrorHandler} from 'src/error-handling/commonErrorHanlders';
 
 function getQueryString(obj: any): string {
