@@ -27,7 +27,16 @@ const getResponseObj = (statusMessage:string, statusCode:number,
 
 const log =functions.logger.log;
 const errLog=functions.logger.error;
-const karthickConstId = "KarthicksVisitorId";
+// const karthickConstId = "KarthicksVisitorId";
+
+const checkIfAdmin = async (uid:any) : Promise<boolean> => {
+  const defaultStaticValuesRef = firestoreInstance.collection("Defaults").doc("staticValues");
+  const defaultStaticValuesSnap = await defaultStaticValuesRef.get();
+  const defaultStaticValuesData = defaultStaticValuesSnap.data();
+  log("defaultStaticValuesData::", defaultStaticValuesData);
+  const admins = defaultStaticValuesData!.admins;
+  return admins.includes(uid);
+};
 
 
 export const addVisitor = functions.https.onRequest(
@@ -40,6 +49,12 @@ export const addVisitor = functions.https.onRequest(
 
         const age = calculateAge(request.body.date_of_birth);
         log("calculated age is:", age);
+
+        const defaultStaticValuesRef = firestoreInstance.collection("Defaults").doc("staticValues");
+        const defaultStaticValuesSnap = await defaultStaticValuesRef.get();
+        const defaultStaticValuesData = defaultStaticValuesSnap.data();
+
+        const lastVisitorOrder = defaultStaticValuesData!.last_visitor_order -1;
         const newVisitor = {
           "uid": request.body.uid,
           "visitor_name": request.body.visitor_name,
@@ -49,6 +64,7 @@ export const addVisitor = functions.https.onRequest(
           "age": age,
           "created_time": new Date().toISOString(),
           "is_deleted": false,
+          "order": lastVisitorOrder,
         };
         log("new visitor is", newVisitor);
 
@@ -93,12 +109,14 @@ export const getVisitors = functions.https.onRequest(
         const visitorCollection = firestoreInstance
             .collection("Visitors").where("is_deleted", "==",
             request.query!.deleted? true:false
-            );
+            ).orderBy("order");
 
         let filteredCollection;
 
         if (request.query.uid) {
-          filteredCollection = request.query!.uid === karthickConstId ?
+          const isAdmin = await checkIfAdmin(request.query!.uid);
+          log("isAdmin:::", isAdmin);
+          filteredCollection = isAdmin ?
           visitorCollection :
           visitorCollection.where("uid", "==", request.query.uid);
         }
@@ -326,6 +344,18 @@ export const bookAppointment = functions.https.onRequest(
             "slot_time": request.body.slot_time,
           };
         }
+
+        const defaultStaticValuesRef = firestoreInstance.collection("Defaults").doc("staticValues");
+        const defaultStaticValuesSnap = await defaultStaticValuesRef.get();
+        const defaultStaticValuesData = defaultStaticValuesSnap.data();
+
+        const lastBookingOrder = defaultStaticValuesData!.last_booking_order -1;
+
+        newBooking = {
+          ...newBooking,
+          "order": lastBookingOrder,
+        };
+
         log("newly booked obj: ", newBooking);
         const bookingsDocumentRef = await firestoreInstance
             .collection("Bookings").add(newBooking);
@@ -336,6 +366,8 @@ export const bookAppointment = functions.https.onRequest(
         const visitorDocuementData = visitorDocumentGet.data();
 
         log("booking made successfully", bookingsDocumentRef.id );
+        await defaultStaticValuesRef.update({last_booking_order: lastBookingOrder});
+        log("last booking order updated");
         const bookingDetails = {
           ...newBooking,
           "booking_id": bookingsDocumentRef.id,
@@ -369,22 +401,26 @@ export const getBookings = functions.https.onRequest(
           throw new Error("required params not sent");
         }
         const bookingstCollectionRef = firestoreInstance
-            .collection("Bookings");
+            .collection("Bookings").orderBy("order");
 
         let filteredBookingCollection;
 
         if (request.query.uid) {
-          filteredBookingCollection = request.query!.uid === karthickConstId ?
+          const isAdmin = await checkIfAdmin(request.query!.uid);
+          log("isAdmin:::", isAdmin);
+          filteredBookingCollection = isAdmin ?
           bookingstCollectionRef :
           bookingstCollectionRef.where("uid", "==", request.query.uid);
         }
+        let filteredBookingList = filteredBookingCollection ?
+          await filteredBookingCollection.get() :[] as unknown as FirebaseFirestore.QuerySnapshot<FirebaseFirestore.DocumentData>;
 
-        const filteredBookingList = filteredBookingCollection ?
+        filteredBookingList = filteredBookingCollection ?
           await filteredBookingCollection.get() :[] as unknown as FirebaseFirestore.QuerySnapshot<FirebaseFirestore.DocumentData>;
 
         const bookingsList = [] as Array<any>;
 
-        log("filteredBookingList.size", filteredBookingList.size);
+        log("filteredBookingList.size after pagination", filteredBookingList.size);
         for await (const booking of filteredBookingList.docs ) {
           const bookingData = booking.data();
           const visitorDocument = firestoreInstance
@@ -516,7 +552,9 @@ const initializeDefaults=async () => {
   log("default slot data:: ", defaultData);
 
   const staticValues = {
-    last_date_order: 0,
+    last_date_order: 0, // asc sort
+    last_booking_order: Number.MAX_SAFE_INTEGER, // dsc sort
+    last_visitor_order: Number.MAX_SAFE_INTEGER, // dsc sort
   };
   await firestoreInstance.collection("Defaults").doc("staticValues").set(staticValues);
   log("staticValues data:: ", staticValues);
@@ -571,9 +609,7 @@ export const initializeDataBase= functions.https.onRequest(
 export const slotUpdatePubSub = functions.pubsub.schedule("59 23 * * *").timeZone("Asia/Kolkata").onRun(async (context) => {
   try {
     log("Triggered slotUpdatePubSub");
-    const defaultStaticValuesRef = firestoreInstance.collection("Defaults").doc("staticValues");
 
-    const defaultStaticValuesSnap = await defaultStaticValuesRef.get();
     const defaultSlotRef = await firestoreInstance.collection("Defaults").doc("slots").get();
     const defaultSlotData = defaultSlotRef.data();
 
@@ -581,6 +617,8 @@ export const slotUpdatePubSub = functions.pubsub.schedule("59 23 * * *").timeZon
     currentDate.setDate(new Date().getDate()+1);// +1 because the server is in US
     const oldestActiveDateDocuementId = currentDate.toDateString().toString();
     await firestoreInstance.collection("Slots").doc(oldestActiveDateDocuementId).update({"is_deleted": true});
+    const defaultStaticValuesRef = firestoreInstance.collection("Defaults").doc("staticValues");
+    const defaultStaticValuesSnap = await defaultStaticValuesRef.get();
     const defaultStaticValuesData = defaultStaticValuesSnap.data();
 
     log("updated old document as deleted ");
@@ -619,12 +657,8 @@ export const checkIfUserIsAdmin= functions.https.onRequest(
         if (!request.query || !request.query.uid) {
           throw new Error("required params not sent");
         }
-        const defaultStaticValuesRef = firestoreInstance.collection("Defaults").doc("staticValues");
-        const defaultStaticValuesSnap = await defaultStaticValuesRef.get();
-        const defaultStaticValuesData = defaultStaticValuesSnap.data();
-        log("defaultStaticValuesData::", defaultStaticValuesData);
-        const admins = defaultStaticValuesData!.admins;
-        if (admins.includes(request.query.uid)) {
+        const isAdmin =await checkIfAdmin(request.query.uid);
+        if (isAdmin) {
           const responseObj= getResponseObj("given user is an admin", 200);
           response.send(responseObj);
           log("response sent successfully", responseObj);
