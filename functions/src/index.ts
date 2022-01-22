@@ -30,12 +30,73 @@ const errLog=functions.logger.error;
 // const karthickConstId = "KarthicksVisitorId";
 
 const checkIfAdmin = async (uid:any) : Promise<boolean> => {
+  log("checking if uid is admin", uid);
   const defaultStaticValuesRef = firestoreInstance.collection("Defaults").doc("staticValues");
   const defaultStaticValuesSnap = await defaultStaticValuesRef.get();
   const defaultStaticValuesData = defaultStaticValuesSnap.data();
   log("defaultStaticValuesData::", defaultStaticValuesData);
   const admins = defaultStaticValuesData!.admins;
   return admins.includes(uid);
+};
+
+const addNewDate = async (currentDate:Date, defaultSlotData: any) => {
+  const documentId = currentDate.toDateString().toString();
+  if ((await firestoreInstance.collection("Slots").doc(documentId).get()).exists) {
+    throw new Error("date already exists");
+  }
+  const defaultStaticValuesRef = firestoreInstance.collection("Defaults").doc("staticValues");
+  const defaultStaticValuesSnap = await defaultStaticValuesRef.get();
+  const defaultStaticValuesData = defaultStaticValuesSnap.data();
+  const isSunday = currentDate.getDay() === 0; // week starts with sunday and thus its value is 0
+  log("latest document id", documentId);
+
+  const isDateNotAvailable = isSunday || defaultSlotData!.stop_booking;
+  const newDateDocument= {"is_holiday": isDateNotAvailable, "is_deleted": false, "order": defaultStaticValuesData!.last_date_order+1};
+  await defaultStaticValuesRef.update({last_date_order: defaultStaticValuesData!.last_date_order+1});
+
+  await firestoreInstance.collection("Slots").doc(documentId).set(newDateDocument);
+  log("added new date document");
+
+  let slotOrder = 1;
+  for await (const timing of defaultSlotData!.timings ) {
+    const newSlotDocument = {
+      available_count: isDateNotAvailable ? 0 :defaultSlotData!.available_count,
+      online_available_count: isDateNotAvailable ? 0 :defaultSlotData!.online_available_count,
+      order: slotOrder,
+    };
+    await firestoreInstance.collection("Slots").doc(documentId).collection("timing").doc(timing).set(newSlotDocument);
+    slotOrder++;
+  }
+  log("added time slot documents");
+};
+
+const deleteADate = async (dateDocumentId:string) => {
+  await firestoreInstance.collection("Slots").doc(dateDocumentId).update({"is_deleted": true});
+};
+
+
+const selectedDateObj = async (dateDocumentId:string) => {
+  const dateDocument = firestoreInstance
+      .collection("Slots").doc(dateDocumentId);
+  const dateFieldsSnapShot = (await dateDocument.get());
+  if (!dateFieldsSnapShot.exists) {
+    throw new Error("selected date slot is not available");
+  }
+  const dateFields = dateFieldsSnapShot.data();
+  log("dateFields :::", dateFields);
+  const timingCollectionList = await dateDocument
+      .collection("timing").orderBy("order").get();
+  const timings = [] as Array<any>;
+  for await (const timeSlotObj of timingCollectionList.docs ) {
+    const slotData = {...timeSlotObj.data(), slot_time: timeSlotObj.id};
+    timings.push(slotData);
+  }
+
+
+  return {
+    ...dateFields,
+    timings: timings,
+  };
 };
 
 
@@ -254,6 +315,9 @@ export const getSlots = functions.https.onRequest(
         const dateList = [] as Array<any>;
 
         log("dateCollectionList.size", dateCollectionList.size);
+        const defaultSlotRef = await firestoreInstance
+            .collection("Defaults").doc("slots").get();
+        const defaultSlotData = defaultSlotRef.data();
 
         for await (const selectedDateDocumentObj of dateCollectionList.docs ) {
           const dateDocument = firestoreInstance
@@ -274,6 +338,7 @@ export const getSlots = functions.https.onRequest(
           const dateData = {
             slot_date: selectedDateDocumentObj.id,
             ...dataFields,
+            is_holiday: defaultSlotData!.stop_booking,
             timings: timings,
           };
           dateList.push(dateData);
@@ -487,9 +552,9 @@ export const getClinicDetails = functions.https.onRequest(
         const clinics = [];
         const clinicsCollectionRef = await firestoreInstance
             .collection("ClinicDetails").get();
-        log("videosCollectionRef.size", clinicsCollectionRef.size);
-        for await (const video of clinicsCollectionRef.docs ) {
-          const clinicData = video.data();
+        log("clinicsCollectionRef.size", clinicsCollectionRef.size);
+        for await (const clinic of clinicsCollectionRef.docs ) {
+          const clinicData = {...clinic.data(), clinic_id: clinic.id};
           clinics.push(clinicData);
         }
         const responseObj = getResponseObj("clinics collected successfully", 200,
@@ -534,15 +599,11 @@ export const getSliderImages = functions.https.onRequest(
 const initializeDefaults=async () => {
   log("Triggered initializeDefaults");
   const defaultData = {
-    available_count: 5,
-    online_available_count: 5,
+    available_count: 20,
+    online_available_count: 20,
     timings: [
-      "7am-8am",
-      "8am-9am",
-      "9am-10am",
-      "6pm-7pm",
-      "7pm-8pm",
-      "8pm-9pm",
+      "11am-1pm",
+      "6:30pm-8pm",
     ],
     stop_booking: false,
     no_of_days: 7,
@@ -606,44 +667,23 @@ export const initializeDataBase= functions.https.onRequest(
       }
     });
 
-export const slotUpdatePubSub = functions.pubsub.schedule("59 23 * * *").timeZone("Asia/Kolkata").onRun(async (context) => {
+export const slotUpdatePubSub = functions.pubsub.schedule("59 19 * * *").timeZone("Asia/Kolkata").onRun(async (context) => {
   try {
     log("Triggered slotUpdatePubSub");
 
     const defaultSlotRef = await firestoreInstance.collection("Defaults").doc("slots").get();
     const defaultSlotData = defaultSlotRef.data();
 
+
     const currentDate = new Date();
     currentDate.setDate(new Date().getDate()+1);// +1 because the server is in US
     const oldestActiveDateDocuementId = currentDate.toDateString().toString();
-    await firestoreInstance.collection("Slots").doc(oldestActiveDateDocuementId).update({"is_deleted": true});
-    const defaultStaticValuesRef = firestoreInstance.collection("Defaults").doc("staticValues");
-    const defaultStaticValuesSnap = await defaultStaticValuesRef.get();
-    const defaultStaticValuesData = defaultStaticValuesSnap.data();
+    deleteADate(oldestActiveDateDocuementId);
 
     log("updated old document as deleted ");
 
-
     currentDate.setDate(new Date().getDate()+defaultSlotData!.no_of_days+1); // +1 because the server is in US
-    const documentId = currentDate.toDateString().toString();
-    log("latest document id", documentId);
-
-    const newDateDocument= {"is_holiday": defaultSlotData!.stop_booking, "is_deleted": false, "order": defaultStaticValuesData!.last_date_order+1};
-    await defaultStaticValuesRef.update({last_date_order: defaultStaticValuesData!.last_date_order+1});
-    await firestoreInstance.collection("Slots").doc(documentId).set(newDateDocument);
-    log("added new date document");
-
-    let slotOrder = 1;
-    for await (const timing of defaultSlotData!.timings ) {
-      const newSlotDocument = {
-        available_count: defaultSlotData!.available_count,
-        online_available_count: defaultSlotData!.online_available_count,
-        order: slotOrder,
-      };
-      await firestoreInstance.collection("Slots").doc(documentId).collection("timing").doc(timing).set(newSlotDocument);
-      slotOrder++;
-    }
-    log("added time slot documents");
+    await addNewDate(currentDate, defaultSlotData);
   } catch ( error) {
     errLog(error);
   }
@@ -660,6 +700,186 @@ export const checkIfUserIsAdmin= functions.https.onRequest(
         const isAdmin =await checkIfAdmin(request.query.uid);
         if (isAdmin) {
           const responseObj= getResponseObj("given user is an admin", 200);
+          response.send(responseObj);
+          log("response sent successfully", responseObj);
+        } else {
+          throw new Error("you are not an admin");
+        }
+      } catch ( error) {
+        errLog(error);
+        const errorResponseObj =getResponseObj(error.message ? error.message : error.toString(), 500 );
+        response.send(errorResponseObj);
+      }
+    });
+
+export const updateYoutubeVidoes = functions.https.onRequest(
+    async (request, response) => {
+      try {
+        log("Triggered updateYoutubeVidoes method with request:",
+            request.query);
+        if (!request.query || !request.query.uid || !request.query.video_id || !request.query.udpated_video_id) {
+          throw new Error("required params not sent");
+        }
+        const existingVideoId =request.query.video_id;
+        const updatedVideoId = request.query.udpated_video_id;
+        const isAdmin =await checkIfAdmin(request.query.uid);
+        if (isAdmin) {
+          const videosCollectionRef = await firestoreInstance
+              .collection("Videos").where("video_id", "==", existingVideoId) .get();
+          log("videosCollectionRef.size", videosCollectionRef.size);
+          if (!videosCollectionRef.size) {
+            throw new Error("no video present with given video id");
+          }
+          const updatedVideoDocumentId = videosCollectionRef.docs[0].id;
+          log("updatedVideoDocumentId", updatedVideoDocumentId);
+          const updatedVideoDocumentObj = {
+            video_id: updatedVideoId,
+          };
+          await firestoreInstance
+              .collection("Videos").doc(updatedVideoDocumentId).update(updatedVideoDocumentObj);
+          const responseObj= getResponseObj("data updated successfully", 200);
+          response.send(responseObj);
+          log("response sent successfully", responseObj);
+        } else {
+          throw new Error("This operation can only be performed by admin");
+        }
+      } catch ( error) {
+        errLog(error);
+        const errorResponseObj =getResponseObj(error.message ? error.message : error.toString(), 500 );
+        response.send(errorResponseObj);
+      }
+    });
+
+
+export const updateClinicDetails= functions.https.onRequest(
+    async (request, response) => {
+      try {
+        log("Triggered updateClinicDetails method with request:",
+            request.query);
+        if (!request.query || !request.query.uid || !request.query.clinic_id || !(request.query.address || request.query.map_url || request.query.phone ) ) {
+          throw new Error("required params not sent");
+        }
+        const updatedClinicDetailsObj:{
+          [key: string]: any
+      } ={};
+
+        if (request.query.address) {
+          updatedClinicDetailsObj.address = request.query.address;
+        }
+        if (request.query.map_url) {
+          updatedClinicDetailsObj.map_url = request.query.map_url;
+        }
+        if (request.query.phone) {
+          updatedClinicDetailsObj.phone = request.query.phone;
+        }
+        log("updatedClinicDetailsObj is:::", updatedClinicDetailsObj);
+        const isAdmin =await checkIfAdmin(request.query.uid);
+        if (isAdmin) {
+          await firestoreInstance
+              .collection("ClinicDetails").doc(request.query.clinic_id as string).update(updatedClinicDetailsObj);
+          const responseObj= getResponseObj("given info updated successfully", 200);
+          response.send(responseObj);
+          log("response sent successfully", responseObj);
+        } else {
+          throw new Error("This operation can only be performed by admin");
+        }
+      } catch ( error) {
+        errLog(error);
+        const errorResponseObj =getResponseObj(error.message ? error.message : error.toString(), 500 );
+        response.send(errorResponseObj);
+      }
+    });
+
+
+export const getSlotDateDetails= functions.https.onRequest(
+    async (request, response) => {
+      try {
+        log("Triggered getSlotDateDetails method with request:",
+            request.query);
+        if (!request.query || !request.query.uid || !request.query.date) {
+          throw new Error("required params not sent");
+        }
+        const isAdmin =await checkIfAdmin(request.query.uid);
+        if (isAdmin) {
+          const selectedDateResponse = await selectedDateObj(request.query.date as string);
+          const responseObj= getResponseObj("successfully retrived date info", 200,
+              {
+                slot_date: selectedDateResponse,
+              });
+          response.send(responseObj);
+          log("response sent successfully", responseObj);
+        } else {
+          throw new Error("you are not an admin");
+        }
+      } catch ( error) {
+        errLog(error);
+        const errorResponseObj =getResponseObj(error.message ? error.message : error.toString(), 500 );
+        response.send(errorResponseObj);
+      }
+    });
+
+export const updateSlotDateDetails= functions.https.onRequest(
+    async (request, response) => {
+      try {
+        log("Triggered updateSlotDateDetails method with request:",
+            request.body);
+
+        log(request.body.is_holiday === undefined);
+        if (!request.body || !request.body.uid || !request.body.date || !request.body.timings ) {
+          throw new Error("required params not sent");
+        }
+        const isAdmin =await checkIfAdmin(request.body.uid);
+        if (isAdmin) {
+          const dateDocument = firestoreInstance
+              .collection("Slots").doc(request.body.date as string);
+          const dateFieldsSnapShot = (await dateDocument.get());
+          if (!dateFieldsSnapShot.exists) {
+            throw new Error("selected date slot is not available");
+          }
+          const dateFields = dateFieldsSnapShot.data();
+          log("dateFields :::", dateFields);
+          dateDocument.update( {
+            is_holiday: request.body.is_holiday ? true : false,
+          }
+          );
+          for await (const timeSlotObj of request.body.timings ) {
+            await dateDocument
+                .collection("timing").doc(timeSlotObj.slot_time).update({
+                  available_count: timeSlotObj.available_count,
+                });
+          }
+          const responseObj= getResponseObj("successfully update date info", 200);
+          response.send(responseObj);
+          log("response sent successfully", responseObj);
+        } else {
+          throw new Error("you are not an admin");
+        }
+      } catch ( error) {
+        errLog(error);
+        const errorResponseObj =getResponseObj(error.message ? error.message : error.toString(), 500 );
+        response.send(errorResponseObj);
+      }
+    });
+
+
+export const addSelectedDateDetails= functions.https.onRequest(
+    async (request, response) => {
+      try {
+        log("Triggered addSelectedDateDetails method with request:",
+            request.query);
+        if (!request.query || !request.query.uid || !request.query.date) {
+          throw new Error("required params not sent");
+        }
+        const isAdmin =await checkIfAdmin(request.query.uid);
+        if (isAdmin) {
+          const defaultSlotRef = await firestoreInstance.collection("Defaults").doc("slots").get();
+          const defaultSlotData = defaultSlotRef.data();
+          await addNewDate( new Date(request.query.date as string), defaultSlotData);
+          const selectedDateResponse = await selectedDateObj(request.query.date as string);
+          const responseObj= getResponseObj("successfully retrived date info", 200,
+              {
+                slot_date: selectedDateResponse,
+              });
           response.send(responseObj);
           log("response sent successfully", responseObj);
         } else {

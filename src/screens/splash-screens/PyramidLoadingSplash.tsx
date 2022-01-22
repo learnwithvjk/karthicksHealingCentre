@@ -1,7 +1,14 @@
 import React, {useEffect, useRef} from 'react';
-import {Animated, StyleSheet, Text, View, Dimensions} from 'react-native';
+import {
+  Animated,
+  StyleSheet,
+  Text,
+  View,
+  Dimensions,
+  Image,
+} from 'react-native';
 
-import LottieView from 'lottie-react-native';
+// import LottieView from 'lottie-react-native';
 
 export default function PyramidLoadingSplash({
   postSplashAction,
@@ -9,33 +16,36 @@ export default function PyramidLoadingSplash({
   isError,
 }: any) {
   const startAnimation = useRef(new Animated.Value(0)).current;
-  async function onAnimationComplete() {
-    if (isError) {
-      return;
+  // async function onAnimationComplete() {
+  //   if (isError) {
+  //     return;
+  //   }
+  //   postSplashAction();
+  //   Animated.sequence([
+  //     Animated.timing(startAnimation, {
+  //       toValue: 15,
+  //       duration: 1000,
+  //       useNativeDriver: true,
+  //     }),
+  //   ]).start(() => {
+  //     // postSplashAction();
+  //   });
+  // }
+
+  useEffect(() => {
+    if (!isLoading) {
+      if (isError) {
+        return;
+      }
+      postSplashAction();
     }
-    postSplashAction();
-    Animated.sequence([
-      Animated.timing(startAnimation, {
-        toValue: 15,
-        duration: 1000,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      // postSplashAction();
-    });
-  }
+  }, [isError, postSplashAction, isLoading]);
 
   return (
     <View style={styles.pageWrapper}>
-      <View style={styles.iconWrapper}>
+      {/* <View style={styles.iconWrapper}>
         <View style={styles.lottieAnimation}>
-          <LottieView
-            source={require('assets/lotties/pyramid-lottie.json')}
-            autoPlay
-            speed={0.8}
-            loop={isLoading}
-            onAnimationFinish={onAnimationComplete}
-          />
+
         </View>
         <Animated.View
           style={{
@@ -46,7 +56,13 @@ export default function PyramidLoadingSplash({
             <View style={styles.diamondShieldBottom} />
           </View>
         </Animated.View>
-      </View>
+      </View> */}
+      <Image
+        source={require('assets/pngs/splash-image.png')}
+        resizeMode="contain"
+        style={styles.brandImage}
+      />
+
       <View style={styles.titleWrapper}>
         <Text style={styles.title}> Karthik's Healing Centre </Text>
       </View>
@@ -80,12 +96,16 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   titleWrapper: {
-    top: Dimensions.get('window').height / 20,
     position: 'relative',
+    alignItems: 'center',
   },
   title: {
     fontSize: 24,
     fontWeight: '700',
+    color: '#fff',
+  },
+  desc: {
+    fontSize: 14,
     color: '#fff',
   },
   diamondShield: {
@@ -118,5 +138,10 @@ const styles = StyleSheet.create({
     borderRightWidth: 50,
     borderBottomColor: 'transparent',
     borderBottomWidth: 50,
+  },
+  brandImage: {
+    width: '60%',
+    height: '20%',
+    marginBottom: 10,
   },
 });
