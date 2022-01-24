@@ -48,6 +48,7 @@ const addNewDate = async (currentDate:Date, defaultSlotData: any) => {
   const defaultStaticValuesSnap = await defaultStaticValuesRef.get();
   const defaultStaticValuesData = defaultStaticValuesSnap.data();
   const isSunday = currentDate.getDay() === 0; // week starts with sunday and thus its value is 0
+  const isSaturday = currentDate.getDay() === 6; // week starts with sunday and thus its value is 0
   log("latest document id", documentId);
 
   const isDateNotAvailable = isSunday || defaultSlotData!.stop_booking;
@@ -58,7 +59,8 @@ const addNewDate = async (currentDate:Date, defaultSlotData: any) => {
   log("added new date document");
 
   let slotOrder = 1;
-  for await (const timing of defaultSlotData!.timings ) {
+  const defaultTimings = isSaturday ? defaultSlotData!.timings_half_day : defaultSlotData!.timings;
+  for await (const timing of defaultTimings ) {
     const newSlotDocument = {
       available_count: isDateNotAvailable ? 0 :defaultSlotData!.available_count,
       online_available_count: isDateNotAvailable ? 0 :defaultSlotData!.online_available_count,
@@ -315,9 +317,7 @@ export const getSlots = functions.https.onRequest(
         const dateList = [] as Array<any>;
 
         log("dateCollectionList.size", dateCollectionList.size);
-        const defaultSlotRef = await firestoreInstance
-            .collection("Defaults").doc("slots").get();
-        const defaultSlotData = defaultSlotRef.data();
+
 
         for await (const selectedDateDocumentObj of dateCollectionList.docs ) {
           const dateDocument = firestoreInstance
@@ -338,7 +338,6 @@ export const getSlots = functions.https.onRequest(
           const dateData = {
             slot_date: selectedDateDocumentObj.id,
             ...dataFields,
-            is_holiday: defaultSlotData!.stop_booking,
             timings: timings,
           };
           dateList.push(dateData);

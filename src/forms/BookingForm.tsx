@@ -161,7 +161,13 @@ export default function BookingForm({navigation, route}: any) {
     const getSlotsInfo = getSlots().then(slots => {
       console.log('slot Data');
       console.log(slots);
-      setSlotData(JSON.parse(JSON.stringify(slots)));
+      let newSlotData = JSON.parse(JSON.stringify(slots))
+      newSlotData.sort(function(a,b){
+        // Turn your strings into dates, and then subtract them
+        // to get a value that is either negative, positive, or zero.
+        return new Date(a.slot_date) - new Date(b.slot_date);
+      });
+      setSlotData(newSlotData);
       initialFormData.slot_date = slots[0].slot_date;
     });
 
@@ -383,14 +389,15 @@ export default function BookingForm({navigation, route}: any) {
 
                     <View style={styles.availableTime}>
                       {slotData &&
-                        slotData.length !== 0 &&
+                        slotData.length !== 0 && 
+                        slotData[selectedDateIndex] &&
+                        !(slotData[selectedDateIndex] as any).is_holiday &&
                         (slotData[selectedDateIndex] as any).timings.map(
                           (timing: any) => (
                             <TouchableOpacity
                               key={timing.slot_time}
                               disabled={
-                                (slotData[selectedDateIndex] as any)
-                                  .is_holiday ||
+                                
                                 timing.clinic_available_count <= 0
                               }
                               onPress={() =>
@@ -403,8 +410,7 @@ export default function BookingForm({navigation, route}: any) {
                                 styles.timingWrapper,
                                 values.slot_time === timing.slot_time &&
                                   styles.selected,
-                                ((slotData[selectedDateIndex] as any)
-                                  .is_holiday ||
+                                (
                                   timing.clinic_available_count <= 0) &&
                                   styles.notAvailableWrapper,
                               ]}>
@@ -413,8 +419,7 @@ export default function BookingForm({navigation, route}: any) {
                                   styles.timing,
                                   values.slot_time === timing.slot_time &&
                                     styles.selectedLabel,
-                                  ((slotData[selectedDateIndex] as any)
-                                    .is_holiday ||
+                                  (
                                     timing.clinic_available_count <= 0) &&
                                     styles.notAvailableLabel,
                                 ]}>
@@ -428,8 +433,7 @@ export default function BookingForm({navigation, route}: any) {
                                   values.slot_time === timing.slot_time &&
                                     styles.selectedLabel,
 
-                                  ((slotData[selectedDateIndex] as any)
-                                    .is_holiday ||
+                                  (
                                     timing.clinic_available_count <= 0) &&
                                     styles.notAvailableDesc,
 
@@ -438,8 +442,7 @@ export default function BookingForm({navigation, route}: any) {
                                 ]}>
                                 {values.slot_time === timing.slot_time
                                   ? ' '
-                                  : (slotData[selectedDateIndex] as any)
-                                      .is_holiday ||
+                                  : 
                                     timing.clinic_available_count <= 0
                                   ? 'Not Available'
                                   : 'Available'}
@@ -448,6 +451,22 @@ export default function BookingForm({navigation, route}: any) {
                           ),
                         )}
                     </View>
+                    <View style={styles.availableTime}>
+                      {slotData &&
+                        slotData.length !== 0 && 
+                        slotData[selectedDateIndex] &&
+                        (slotData[selectedDateIndex] as any).is_holiday &&
+                        (
+                          <View style={styles.holidayImageWrapper}>
+                          <Image
+                            source={require('assets/pngs/holiday.png')}
+                            resizeMode="contain"
+                            style={[styles.holidayImage]}
+                          />
+                          </View>
+                        )
+                      }
+                      </View>
                     {errors.slot_time && touched.slot_time ? (
                       <Text style={styles.textErr}>{errors.slot_time}</Text>
                     ) : null}
@@ -488,7 +507,11 @@ export default function BookingForm({navigation, route}: any) {
               </ScrollView>
 
               {/* {values.visit_type === 'clinic' && ( */}
-              <View style={styles.submitButtonWrapper}>
+                {  !(values.visit_type === 'clinic' && (slotData &&
+                        slotData.length !== 0 && 
+                        slotData[selectedDateIndex] &&
+                        (slotData[selectedDateIndex] as any).is_holiday) ) && (
+                          <View style={styles.submitButtonWrapper}>
                 <TouchableOpacity
                   style={[styles.touchableWrapper, styles.shadow]}
                   onPress={handleSubmit}>
@@ -500,7 +523,9 @@ export default function BookingForm({navigation, route}: any) {
                   )}
                 </TouchableOpacity>
               </View>
-              {/* )} */}
+                        )
+              }
+              
             </View>
           )}
         </Formik>
@@ -547,6 +572,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     marginTop: 20,
     borderRadius: 5,
+    minWidth: 50,
     backgroundColor: '#fff', //#fff6f2
     borderWidth: 1,
     alignItems: 'center',
@@ -697,4 +723,14 @@ const styles = StyleSheet.create({
   placeHolder: {
     color: 'grey',
   },
+  holidayImageWrapper: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    display: 'flex',
+    width: '100%'
+  },
+  holidayImage: {
+    width: 150,
+    height: 100
+  }
 });
