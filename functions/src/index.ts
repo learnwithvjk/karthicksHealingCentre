@@ -1,6 +1,6 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
-admin.initializeApp();
+admin.initializeApp(functions.config().firebase);
 
 const firestoreInstance = admin.firestore();
 
@@ -442,6 +442,15 @@ export const bookAppointment = functions.https.onRequest(
           "age": visitorDocuementData!.age,
         };
 
+        const message = {
+          notification: {
+            title: "Booking Confirmed",
+            body: `${bookingDetails.visitor_name} - ${bookingDetails.phone_number}`,
+          },
+          topic: "test",
+        };
+        const messageResponse = await admin.messaging().send(message);
+        log("notification message response", messageResponse);
         const responseObj = getResponseObj("booked successfully",
             200, {
               booking_datails: bookingDetails,
@@ -842,10 +851,17 @@ export const updateSlotDateDetails= functions.https.onRequest(
           }
           );
           for await (const timeSlotObj of request.body.timings ) {
-            await dateDocument
-                .collection("timing").doc(timeSlotObj.slot_time).update({
-                  available_count: timeSlotObj.available_count,
-                });
+            const timeSlotSnapShot = await dateDocument
+                .collection("timing").doc(timeSlotObj.slot_time).get();
+            if (timeSlotSnapShot.exists) {
+              await dateDocument
+                  .collection("timing").doc(timeSlotObj.slot_time).update({
+                    available_count: timeSlotObj.available_count,
+                  });
+            } else {
+              await dateDocument
+                  .collection("timing").doc(timeSlotObj.slot_time).set(timeSlotObj);
+            }
           }
           const responseObj= getResponseObj("successfully update date info", 200);
           response.send(responseObj);
@@ -879,6 +895,68 @@ export const addSelectedDateDetails= functions.https.onRequest(
               {
                 slot_date: selectedDateResponse,
               });
+          response.send(responseObj);
+          log("response sent successfully", responseObj);
+        } else {
+          throw new Error("you are not an admin");
+        }
+      } catch ( error) {
+        errLog(error);
+        const errorResponseObj =getResponseObj(error.message ? error.message : error.toString(), 500 );
+        response.send(errorResponseObj);
+      }
+    });
+
+export const getDefaultTimeDetails= functions.https.onRequest(
+    async (request, response) => {
+      try {
+        log("Triggered getDefaultTimeDetails method with request:",
+            request.query);
+        if (!request.query || !request.query.uid) {
+          throw new Error("required params not sent");
+        }
+        const isAdmin =await checkIfAdmin(request.query.uid);
+        if (isAdmin) { // this check is not required yet still lets check
+          const defaultSlotRef = await firestoreInstance.collection("Defaults").doc("slots").get();
+          const defaultSlotData = defaultSlotRef.data();
+          const responseObj= getResponseObj("datas received successfully", 200,
+              {
+                default_timings: defaultSlotData,
+              }
+          );
+          response.send(responseObj);
+          log("response sent successfully", responseObj);
+        } else {
+          throw new Error("you are not an admin");
+        }
+      } catch ( error) {
+        errLog(error);
+        const errorResponseObj =getResponseObj(error.message ? error.message : error.toString(), 500 );
+        response.send(errorResponseObj);
+      }
+    });
+
+export const updateDefaultTimeDetails= functions.https.onRequest(
+    async (request, response) => {
+      try {
+        log("Triggered getDefaultTimeDetails method with request:",
+            request.body);
+        if (!request.body || !request.body.uid || !request.body.timings || !request.body.timings_half_day ) {
+          throw new Error("required params not sent");
+        }
+        const isAdmin =await checkIfAdmin(request.body.uid);
+        if (isAdmin) { // this check is not required yet still lets check
+          const updatedDefaultTimeDetails = {
+            stop_booking: request.body.stop_booking ? true : false,
+            available_count: request.body.available_count ? request.body.available_count : 20,
+            no_of_days: request.body.no_of_days ? request.body.no_of_days : 7,
+            timings: request.body.timings,
+            timings_half_day: request.body.timings_half_day,
+          };
+          await firestoreInstance.collection("Defaults").doc("slots").update(updatedDefaultTimeDetails);
+
+          const responseObj= getResponseObj("values updated successfully", 200
+          );
           response.send(responseObj);
           log("response sent successfully", responseObj);
         } else {
