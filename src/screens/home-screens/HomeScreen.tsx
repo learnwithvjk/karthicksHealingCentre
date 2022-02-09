@@ -107,6 +107,7 @@ export default function HomeScreen(params: any) {
               circleLoop
               dotColor="#00790D"
               ImageComponentStyle={styles.imageStyle}
+              resizeMode="stretch"
               sliderBoxHeight={200}
               images={sliderImages}
             />
